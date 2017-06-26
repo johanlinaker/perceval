@@ -72,7 +72,7 @@ def filter_custom_fields(fields):
 
     custom_fields = {}
 
-    sorted_fields = [field for field in fields if field['custom'] is True]
+    sorted_fields = [field for field in fields if field['custom'] is True or field['id'] == 'comment']
 
     for custom_field in sorted_fields:
         custom_fields[custom_field['id']] = custom_field
@@ -149,6 +149,8 @@ class Jira(Backend):
                 mapping = map_custom_field(custom_fields, issue['fields'])
                 for k, v in mapping.items():
                     issue['fields'][k] = v
+                comment = self.client.get_comments(issue)
+                issue['fields']['comment'] = comment
                 yield issue
 
     @metadata
@@ -255,6 +257,7 @@ class JiraClient:
     EXPAND = 'renderedFields,transitions,operations,changelog'
     VERSION_API = '2'
     RESOURCE = 'rest/api'
+    ISSUE = 'issue'
 
     def __init__(self, url, project, user, password, verify, cert, max_issues):
         self.url = url
@@ -269,6 +272,11 @@ class JiraClient:
         base_api_url = self.url
         base_api_url = urijoin(base_api_url, self.RESOURCE, self.VERSION_API, type)
         return base_api_url
+
+    def __build_issue_query_url(self, id):
+        issue_query_api_url = self.url
+        issue_query_api_url = urijoin(issue_query_api_url, self.RESOURCE, self.VERSION_API, self.ISSUE, id)
+        return issue_query_api_url
 
     def __build_jql_query(self, from_date):
         AND_OP = 'AND'
@@ -363,6 +371,18 @@ class JiraClient:
         req = session.get(self.__build_base_url('field'))
         req.raise_for_status()
         return req.text
+
+    def get_comments(self, issue):
+        """Retrieve all comments available for the given issue.  """
+        session = self.__init_session()
+
+        req = session.get(self.__build_issue_query_url(issue['id']))
+        req.raise_for_status()
+
+        json = req.json()
+        comment = json['fields']['comment']
+
+        return comment
 
 
 class JiraCommand(BackendCommand):
